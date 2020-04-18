@@ -1,0 +1,614 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1671\cocoasubrtf600
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 ####Team Point Leaderboard####\
+\
+with\
+  points as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Rep_Name\
+      , case\
+        when Rep_Name = 'Nick Sheehan'\
+        or Rep_Name = 'Tim Maghoney'\
+          then 'Johnny Football'\
+        when Rep_Name = 'Heather Walleigh'\
+        or Rep_Name = 'Clay Pinckney'\
+          then 'Heather and Clay'\
+        when Rep_Name = 'Shahin Kazemian'\
+        or Rep_Name = 'Waibi Bakama'\
+          then 'Shahin and Waibi'\
+        when Rep_Name = 'Athena Fong'\
+        or Rep_Name = 'Connor Arendts'\
+          then 'Athena and Connor'\
+        when Rep_Name = 'Clayton Martin'\
+        or Rep_Name = 'Max Sahn'\
+          then 'Clayton and Max'\
+        when Rep_Name = 'Anna Raskind'\
+        or Rep_Name = 'Raymond Kim'\
+          then 'Anna and Raymond'\
+        when Rep_Name = 'Bryan Register'\
+        or Rep_Name = 'Curtis Hallatt'\
+          then 'Bryan and Curtis'\
+      end as Team\
+      , salesforce_fivetran.opportunity.created_date\
+      , salesforce_fivetran.opportunity.name\
+      , u.id id\
+      , stage_name\
+      , amount_arr_c\
+      , case -- Categorize each opp with points values based on stage name\
+        when stage_name in (\
+          'Discovery'\
+          , 'Demo'\
+          , 'Build Consensus'\
+          , 'Closed Lost'\
+        )\
+          then 1\
+        when stage_name in (\
+          'POC'\
+        )\
+          then 2\
+        when stage_name in (\
+          'Proposal'\
+          , 'Negotiation'\
+        )\
+          then 3\
+        when stage_name in (\
+          'Closed Won'\
+        )\
+          then 4\
+      end as Sum_Points\
+    from\
+      salesforce_fivetran.opportunity\
+      join salesforce_fivetran.user u on\
+        salesforce_fivetran.opportunity.owner_id = u.id\
+    where\
+      salesforce_fivetran.opportunity.created_date >= '2020-04-01' -- Only April\
+      and salesforce_fivetran.opportunity.sourced_by_c = 'Outbound'\
+      and salesforce_fivetran.opportunity.stage_name in (\
+        'Discovery'\
+        , 'Demo'\
+        , 'Build Consensus'\
+        , 'Closed Lost'\
+        , 'POC'\
+        , 'Proposal'\
+        , 'Negotiation'\
+        , 'Closed Won'\
+      )\
+      and salesforce_fivetran.opportunity.opp_assignment_c in (\
+        --Exclude distro\
+        'AE Sourced'\
+        , 'Co-Sourced'\
+      )\
+      and (\
+        --Exclude Athena's yellow opps\
+        partner_c is null\
+        or (\
+          closed_reason_c = 'Referred to Yellow'\
+        )\
+      )\
+  )\
+  , agg1 as (\
+    select\
+      Team\
+      , sum(Sum_Points) as Pointsum\
+    from\
+      points\
+    group by\
+      Team\
+  )\
+  , upsells as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Rep_Name\
+      , case\
+        when Rep_Name = 'Nick Sheehan'\
+        or Rep_Name = 'Tim Maghoney'\
+          then 'Johnny Football'\
+        when Rep_Name = 'Heather Walleigh'\
+        or Rep_Name = 'Clay Pinckney'\
+          then 'Heather and Clay'\
+        when Rep_Name = 'Shahin Kazemian'\
+        or Rep_Name = 'Waibi Bakama'\
+          then 'Shahin and Waibi'\
+        when Rep_Name = 'Athena Fong'\
+        or Rep_Name = 'Connor Arendts'\
+          then 'Athena and Connor'\
+        when Rep_Name = 'Clayton Martin'\
+        or Rep_Name = 'Max Sahn'\
+          then 'Clayton and Max'\
+        when Rep_Name = 'Anna Raskind'\
+        or Rep_Name = 'Raymond Kim'\
+          then 'Anna and Raymond'\
+        when Rep_Name = 'Bryan Register'\
+        or Rep_Name = 'Curtis Hallatt'\
+          then 'Bryan and Curtis'\
+      end as Team\
+      , u.id as id\
+      , o.name upsells_name\
+      , o.created_date\
+      , o.stage_name\
+      , o.amount_arr_c\
+      , case -- Categorize each opp with points values based on stage name\
+        when stage_name in (\
+          'Discovery'\
+          , 'Demo'\
+          , 'Build Consensus'\
+          , 'Closed Lost'\
+          , 'POC'\
+        )\
+          then 1\
+        when stage_name in (\
+          'Proposal'\
+          , 'Negotiation'\
+        )\
+          then 2\
+        when stage_name in (\
+          'Closed Won'\
+        )\
+          then 3\
+      end as Total_Points\
+    from\
+      salesforce_fivetran.opportunity o\
+      join salesforce_fivetran.user u on\
+        u.id = o.ae_c\
+    where\
+      o.created_date >= '2020-04-01'\
+      and o.type = 'Upgrade'\
+      and u.title = 'Account Executive'\
+      and o.amount_arr_c > 5000\
+      and o.stage_name in (\
+        'Discovery'\
+        , 'Demo'\
+        , 'Build Consensus'\
+        , 'Closed Lost'\
+        , 'POC'\
+        , 'Proposal'\
+        , 'Negotiation'\
+        , 'Closed Won'\
+      )\
+  )\
+  , agg2 as (\
+    select\
+      Team\
+      , sum(Total_Points) Upsellsum\
+    from\
+      upsells\
+    group by\
+      Team\
+  )\
+  , calls as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Rep_Name\
+      , count(t.created_date) as Calls_Made\
+    from\
+      salesforce_fivetran.user u\
+      join salesforce_fivetran.task t on\
+        t.owner_id = u.id\
+    where\
+      t.created_date >= '2020-04-01'\
+      and u.title = 'Account Executive'\
+      and t.type = 'Call'\
+    group by\
+      Name\
+      , u.first_name\
+      , u.last_name\
+  )\
+  , qualified as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Name\
+      , count(t.created_date) as Total_Activities\
+      , case\
+        when calls.Calls_Made is null\
+          then 0\
+        else calls.Calls_Made\
+      end as Calls_Made\
+      , case\
+        when(Total_Activities >= 500 and Calls_Made >= 150)\
+          then '1'\
+        else '0'\
+      end as Spiff_Qualified\
+    from\
+      salesforce_fivetran.user u\
+      join salesforce_fivetran.task t on\
+        t.owner_id = u.id\
+      left join calls on\
+        calls.Rep_Name = Name\
+    where\
+      t.created_date >= '2020-04-01'\
+      and u.title = 'Account Executive'\
+    group by\
+      Name\
+      , u.first_name\
+      , u.last_name\
+      , Calls_Made\
+  )\
+  , qual_check as (\
+    select\
+      sum(Spiff_Qualified) totalqualpoints\
+      , case\
+        when Name = 'Nick Sheehan'\
+        or Name = 'Tim Maghoney'\
+          then 'Johnny Football'\
+        when Name = 'Heather Walleigh'\
+        or Name = 'Clay Pinckney'\
+          then 'Heather and Clay'\
+        when Name = 'Shahin Kazemian'\
+        or Name = 'Waibi Bakama'\
+          then 'Shahin and Waibi'\
+        when Name = 'Athena Fong'\
+        or Name = 'Connor Arendts'\
+          then 'Athena and Connor'\
+        when Name = 'Anna Raskind'\
+        or Name = 'Raymond Kim'\
+          then 'Anna and Raymond'\
+        when Name = 'Clayton Martin'\
+        or Name = 'Max Sahn'\
+          then 'Clayton and Max'\
+        when Name = 'Bryan Register'\
+        or Name = 'Curtis Hallatt'\
+          then 'Bryan and Curtis'\
+      end as Team\
+    from\
+      qualified\
+    group by\
+      Team\
+      , qualified.Spiff_Qualified\
+  )\
+select\
+  qual_check.Team\
+  , case\
+    when agg1.Pointsum is null\
+      then 0\
+    else agg1.Pointsum\
+  end New_Biz\
+  , case\
+    when agg2.Upsellsum is null\
+      then 0\
+    else agg2.Upsellsum\
+  end Upsells\
+  , (New_Biz + Upsells) as Total_Points\
+  , case\
+    when qual_check.totalqualpoints = 2\
+      then 'Spiff Qualified'\
+    else 'Not Qualified'\
+  end as Spiff_Qualified\
+from\
+  qual_check\
+  left join agg1 on\
+    agg1.Team = qual_check.Team\
+  left join agg2 on\
+    agg2.Team = qual_check.Team\
+group by -- group by rep\
+  agg1.Team\
+  , agg2.Team\
+  , qual_check.Team\
+  , qual_check.totalqualpoints\
+  , agg1.Pointsum\
+  , agg2.Upsellsum\
+order by -- order by \
+  Total_Points desc\
+\
+####Individual Point Leaderboard####\
+with\
+  points as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Rep_Name\
+      , u.id as id\
+      , salesforce_fivetran.opportunity.created_date\
+      , salesforce_fivetran.opportunity.name points_name\
+      , stage_name\
+      , amount_arr_c\
+      , case -- Categorize each opp with points values based on stage name\
+        when stage_name in (\
+          'Discovery'\
+          , 'Demo'\
+          , 'Build Consensus'\
+          , 'Closed Lost'\
+        )\
+          then 1\
+        when stage_name in (\
+          'POC'\
+        )\
+          then 2\
+        when stage_name in (\
+          'Proposal'\
+          , 'Negotiation'\
+        )\
+          then 3\
+        when stage_name in (\
+          'Closed Won'\
+        )\
+          then 4\
+      end as Total_Points\
+    from\
+      salesforce_fivetran.opportunity\
+      join salesforce_fivetran.user u on\
+        salesforce_fivetran.opportunity.owner_id = u.id\
+    where\
+      salesforce_fivetran.opportunity.created_date > '2020-04-01' -- Only April\
+      and salesforce_fivetran.opportunity.sourced_by_c = 'Outbound'\
+      and salesforce_fivetran.opportunity.stage_name in (\
+        'Discovery'\
+        , 'Demo'\
+        , 'Build Consensus'\
+        , 'Closed Lost'\
+        , 'POC'\
+        , 'Proposal'\
+        , 'Negotiation'\
+        , 'Closed Won'\
+      )\
+      and salesforce_fivetran.opportunity.opp_assignment_c in (\
+        --Exclude distro\
+        'AE Sourced'\
+        , 'Co-Sourced'\
+      )\
+      and (\
+        --Exclude Athena's yellow opps\
+        partner_c is null\
+        or (\
+          closed_reason_c = 'Referred to Yellow'\
+        )\
+      )\
+  )\
+  , agg1 as (\
+    select\
+      Rep_Name\
+      , id\
+      , sum(Total_Points) as Pointsum\
+    from\
+      points\
+    group by\
+      Rep_Name\
+      , points.id\
+  )\
+  , upsells as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Full_Name\
+      , u.id as id\
+      , o.name upsells_name\
+      , o.created_date\
+      , o.stage_name\
+      , o.amount_arr_c\
+      , case -- Categorize each opp with points values based on stage name\
+        when stage_name in (\
+          'Discovery'\
+          , 'Demo'\
+          , 'Build Consensus'\
+          , 'Closed Lost'\
+          , 'POC'\
+        )\
+          then 1\
+        when stage_name in (\
+          'Proposal'\
+          , 'Negotiation'\
+        )\
+          then 2\
+        when stage_name in (\
+          'Closed Won'\
+        )\
+          then 3\
+      end as Total_Points\
+    from\
+      salesforce_fivetran.opportunity o\
+      join salesforce_fivetran.user u on\
+        u.id = o.ae_c\
+    where\
+      o.created_date >= '2020-04-01'\
+      and o.type = 'Upgrade'\
+      and u.title = 'Account Executive'\
+      and o.amount_arr_c > 5000\
+      and o.stage_name in (\
+        'Discovery'\
+        , 'Demo'\
+        , 'Build Consensus'\
+        , 'Closed Lost'\
+        , 'POC'\
+        , 'Proposal'\
+        , 'Negotiation'\
+        , 'Closed Won'\
+      )\
+  )\
+  , agg2 as (\
+    select\
+      Full_Name\
+      , id\
+      , sum(Total_Points) Upsellsum\
+    from\
+      upsells\
+    group by\
+      Full_Name\
+      , upsells.id\
+  )\
+  , calls as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Rep_Name\
+      , count(t.created_date) as Calls_Made\
+    from\
+      salesforce_fivetran.user u\
+      join salesforce_fivetran.task t on\
+        t.owner_id = u.id\
+    where\
+      t.created_date >= '2020-04-01'\
+      and u.title = 'Account Executive'\
+      and t.type = 'Call'\
+    group by\
+      Name\
+      , u.first_name\
+      , u.last_name\
+  )\
+  , qualified as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Name\
+      , count(t.created_date) as Total_Activities\
+      , case\
+        when calls.Calls_Made is null\
+          then 0\
+        else calls.Calls_Made\
+      end as Calls_Made\
+      , case\
+        when(Total_Activities >= 500 and Calls_Made >= 150)\
+          then 'Qualified'\
+        else 'Not Qualified'\
+      end as Spiff_Qualified\
+    from\
+      salesforce_fivetran.user u\
+      join salesforce_fivetran.task t on\
+        t.owner_id = u.id\
+      left join calls on\
+        calls.Rep_Name = Name\
+    where\
+      t.created_date >= '2020-04-01'\
+      and u.title = 'Account Executive'\
+    group by\
+      Name\
+      , u.first_name\
+      , u.last_name\
+      , Calls_Made\
+  )\
+  , qual_check as (\
+    select\
+      Spiff_Qualified\
+      , Name\
+    from\
+      qualified\
+  )\
+select\
+  (\
+    u.first_name || ' ' || u.last_name\
+  )\
+  as Rep_Name\
+  , case\
+    when Pointsum is null\
+      then 0\
+    else Pointsum\
+  end as New_Biz\
+  , case\
+    when Upsellsum is null\
+      then 0\
+    else Upsellsum\
+  end as Upsells\
+  -- ,Pointsum\
+  -- ,Upsellsum\
+  , (New_Biz + Upsells) as Total_Points\
+  , Spiff_Qualified\
+from\
+  salesforce_fivetran.user u\
+  left join qual_check on\
+    (\
+      u.first_name || ' ' || u.last_name\
+    )\
+    = qual_check.Name\
+  left join agg1 on\
+    agg1.id = u.id\
+  left join agg2 on\
+    agg2.id = u.id\
+where\
+  is_active = 't'\
+  and title = 'Account Executive'\
+  and (\
+    u.first_name || ' ' || u.last_name\
+  )\
+  != 'Connor Rutledge'\
+group by\
+  Rep_Name\
+  , u.first_name\
+  , u.last_name\
+  , Pointsum\
+  , Upsellsum\
+  , qual_check.Spiff_Qualified\
+order by\
+  Total_Points desc\
+\
+\
+####Activities per Rep###\
+\
+with\
+  calls as (\
+    select\
+      (\
+        u.first_name || ' ' || u.last_name\
+      )\
+      as Rep_Name\
+      , count(t.created_date) as Calls_Made\
+    from\
+      salesforce_fivetran.user u\
+      join salesforce_fivetran.task t on\
+        t.owner_id = u.id\
+    where\
+      t.created_date > '2020-04-01'\
+      and u.title = 'Account Executive'\
+      and (\
+        t.type = 'Call'\
+        or t.subject like '[%call%]'\
+        or t.subject like '[%Call]'\
+      )\
+    group by\
+      Name\
+      , u.first_name\
+      , u.last_name\
+  )\
+select\
+  (\
+    u.first_name || ' ' || u.last_name\
+  )\
+  as Name\
+  , count(t.created_date) as Total_Activities\
+  , case\
+    when calls.Calls_Made is null\
+      then 0\
+    else calls.Calls_Made\
+  end\
+  , case\
+    when(Total_Activities >= 500 and Calls_Made >= 150)\
+      then 'Spiff Qualified'\
+    else 'Not Qualified'\
+  end as Spiff_Qualified\
+from\
+  salesforce_fivetran.user u\
+  join salesforce_fivetran.task t on\
+    t.owner_id = u.id\
+  left join calls on\
+    calls.Rep_Name = Name\
+where\
+  t.created_date > '2020-04-01'\
+  and u.title = 'Account Executive'\
+  and t.status = 'Completed'\
+  and (\
+    t.subject like '%[Out]%'\
+    or t.subject like '%[outbound]%'\
+    or t.subject like '%LINKEDIN MESSAGE%'\
+  )\
+group by\
+  Name\
+  , u.first_name\
+  , u.last_name\
+  , Calls_Made\
+order by\
+  Total_Activities desc}
