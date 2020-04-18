@@ -1,0 +1,45 @@
+
+###ACTIVITIES PER REP###
+
+
+-- Get the number of calls made in April
+with calls as (
+  select
+  (
+    u.first_name || ' ' || u.last_name
+  )
+  as Rep_Name
+  , count(t.created_date) as Calls_Made -- Count the number of tasks for the condition, grouped by rep
+from -- user and task table from Salesforce needed
+  salesforce_fivetran.user u
+  join salesforce_fivetran.task t on
+    t.owner_id = u.id
+where
+  t.created_date > '2020-04-01' -- April spiff
+  and u.title = 'Account Executive'
+  and (t.type = 'Call' or t.subject like '[%call%]' or t.subject like '[%Call]') -- Outreach logs calls as [%Call]
+group by
+  Name,u.first_name,u.last_name
+  )
+
+-- Get total activities and include calls mae from calls CTE
+select
+  (
+    u.first_name || ' ' || u.last_name
+  )
+  as Name
+  , count(t.created_date) as Total_Activities -- Get count of total activities
+  , calls.Calls_Made -- Pull calls from calls CTE
+  ,case when (Total_Activities >= 500 and Calls_Made >= 150) then 'Spiff Qualified' else 'Not Qualified' end as Spiff_Qualified
+from -- each rep must complete 500 total activities and 150 calls to qualify; this Case statement makes sure both are true to turn to "Qualified"
+  salesforce_fivetran.user u
+  join salesforce_fivetran.task t on
+    t.owner_id = u.id
+  left join calls on calls.Rep_Name = Name -- join calls CTE with user and task for final chart
+where
+  t.created_date > '2020-04-01' -- April activities
+  and u.title = 'Account Executive'
+  and t.status = 'Completed' -- filter open tasks
+  and (t.subject like '%[Out]%' or t.subject like '%[outbound]%' or t.subject like '%LINKEDIN MESSAGE%') -- outbound actitivies and linkedin messages only; exclude inbound
+group by
+  Name,u.first_name,u.last_name,Calls_Made -- Group by rep
