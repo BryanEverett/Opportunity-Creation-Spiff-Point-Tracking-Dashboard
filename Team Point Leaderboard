@@ -1,0 +1,139 @@
+###TEAM POINT LEADERBOARD###
+
+with
+  points as (
+    select
+      (
+        u.first_name || ' ' || u.last_name
+      )
+      as Rep_Name
+      , salesforce_fivetran.opportunity.created_date
+      , salesforce_fivetran.opportunity.name
+      , stage_name
+      , amount_arr_c
+      , case -- Categorize each opp with points values based on stage name
+        when stage_name in (
+          'Discovery'
+          , 'Demo'
+          , 'Build Consensus'
+          , 'Closed Lost'
+        )
+          then 1
+        when stage_name in (
+          'POC'
+        )
+          then 2
+        when stage_name in (
+          'Proposal'
+          , 'Negotiation'
+        )
+          then 3
+        when stage_name in (
+          'Closed Won'
+        )
+          then 4
+      end as Total_Points
+    from
+      salesforce_fivetran.opportunity
+      join salesforce_fivetran.user u on
+        salesforce_fivetran.opportunity.owner_id = u.id
+    where
+      salesforce_fivetran.opportunity.created_date > '2020-04-01' -- Only April
+      and salesforce_fivetran.opportunity.sourced_by_c = 'Outbound'
+    and salesforce_fivetran.opportunity.stage_name in ('Discovery'
+          , 'Demo'
+          , 'Build Consensus'
+          , 'Closed Lost','POC', 'Proposal'
+          , 'Negotiation', 'Closed Won')
+      and salesforce_fivetran.opportunity.opp_assignment_c in ( --Exclude distro
+        'AE Sourced'
+        , 'Co-Sourced'
+      )
+      and ( --Exclude Athena's yellow opps
+        partner_c is null
+        or (
+          closed_reason_c = 'Referred to Yellow'
+        )
+      )
+  )
+
+
+, calls as (
+  select
+  (
+    u.first_name || ' ' || u.last_name
+  )
+  as Rep_Name
+  , count(t.created_date) as Calls_Made
+from
+  salesforce_fivetran.user u
+  join salesforce_fivetran.task t on
+    t.owner_id = u.id
+where
+  t.created_date > '2020-04-01'
+  and u.title = 'Account Executive'
+  and t.type = 'Call'
+group by
+  Name,u.first_name,u.last_name
+  )
+,
+
+qualified as(
+  
+select
+  (
+    u.first_name || ' ' || u.last_name
+  )
+  as Name
+  , count(t.created_date) as Total_Activities
+  , calls.Calls_Made
+  ,case when (Total_Activities >= 500 and Calls_Made >= 150) then 'Spiff Qualified' else 'Not Qualified' end as Spiff_Qualified
+from
+  salesforce_fivetran.user u
+  join salesforce_fivetran.task t on
+    t.owner_id = u.id
+  join calls on calls.Rep_Name = Name
+where
+  t.created_date > '2020-04-01'
+  and u.title = 'Account Executive'
+group by
+  Name,u.first_name,u.last_name,Calls_Made
+  )
+,
+
+qual_check as (
+  select
+  Name,
+  case when Spiff_Qualified = 'Spiff Qualified' then 1 else 0 end as qualpoints
+  ,  case when Name = 'Nick Sheehan' or Name  = 'Tim Maghoney' then 'Johnny Football'
+when Name  = 'Heather Walleigh' or Name  = 'Clay Pinckney' then 'Heather and Clay'
+when Name  = 'Shahin Kazemian' or Name  = 'Waibi Bakama' then 'Luigi and Waibi'
+when Name  = 'Athena Fong' or Name  = 'Connor Arendts' then 'Athena and Connor'
+when Name = 'Anna Raskind' or Name  = 'Raymond Kim' then 'AnnaKim Skywalker'
+  when Name = 'Clayton Martin' or Name  = 'Max Sahn' then 'Clayton and Max'
+when Name  = 'Bryan Register' or Name  = 'Curtis Hallat' then 'Bryan and Curtis' end as Team
+  ,sum(qualpoints) as totalqualpoints
+  from 
+  qualified
+  group by Team,qualified.Name,qualified.Spiff_Qualified
+  )
+
+
+select 
+  case when Rep_Name = 'Nick Sheehan' or Rep_Name = 'Tim Maghoney' then 'Johnny Football'
+when Rep_Name = 'Heather Walleigh' or Rep_Name = 'Clay Pinckney' then 'Heather and Clay'
+when Rep_Name = 'Shahin Kazemian' or Rep_Name = 'Waibi Bakama' then 'Luigi and Waibi'
+when Rep_Name = 'Athena Fong' or Rep_Name = 'Connor Arendts' then 'Athena and Connor'
+ when Rep_Name = 'Clayton Martin' or Rep_Name  = 'Max Sahn' then 'Clayton and Max'
+when Rep_Name = 'Anna Raskind' or Rep_Name = 'Raymond Kim' then 'AnnaKim Skywalker'
+when Rep_Name = 'Bryan Register' or Rep_Name = 'Curtis Hallat' then 'Bryan and Curtis' end as Team
+  , sum(Total_Points) as Total_Points -- Get list of opps with points for each opp and sum total for each rep
+,case when qual_check.totalqualpoints = 2 then 'Spiff Qualified' else 'Not Qualified' end as Spiff_Qualified
+from
+  points
+  join qual_check on points.Rep_Name = qual_check.Name
+
+group by -- group by rep
+  Team,points.Rep_Name,qual_check.totalqualpoints
+order by -- order by 
+  Total_Points desc
