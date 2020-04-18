@@ -3,7 +3,7 @@
 ###Indiviual Point Leaderboard###
 #Gets the points earned for new business and upsell opportunities per rep#
   
--- get each opportunity created this month and calculate points based on the stage the opportunity has reached
+-- get each opportunity created this month and calculates points based on the stage the opportunity has reached
 with
   with
   points as (
